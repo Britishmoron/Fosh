@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fosh</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+      background: #181818;
+      margin: 0;
+      padding: 0;
+    }
+    #gameinfo {
+      text-align: center;
+      margin: 2em 0 1em 0;
+      color: #eee;
+      font-size: 1.15em;
+    }
+    #controls { margin-bottom: 1em; }
+    #board {
+      display: grid;
+      grid-template: repeat(8, 80px) / repeat(8, 80px);
+      gap: 0;
+      border: 6px solid #4f3623;
+      background: #181818;
+      width: max-content;
+      margin: 0 auto;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px #000000aa;
+      position: relative;
+    }
+    .square {
+      width: 80px; height: 80px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 56px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.08s;
+      position: relative;
+      box-sizing: border-box;
+    }
+    .light {
+      background: repeating-linear-gradient(
+        135deg,
+        #b58863 0px, #b58863 18px, #d2b183 18px, #d2b183 36px
+      );
+      box-shadow: inset 0 0 10px #a67c52cc;
+    }
+    .dark {
+      background: repeating-linear-gradient(
+        135deg,
+        #5b3924 0px, #5b3924 18px, #855e42 18px, #855e42 36px
+      );
+      box-shadow: inset 0 0 15px #392312cc;
+    }
+    .highlight {
+      background: radial-gradient(circle at 50% 50%, #ffe66980 55%, transparent 80%) !important;
+    }
+    .move-circle {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: rgba(20,20,20,0.35);
+      pointer-events: none;
+      z-index: 3;
+    }
+    .move-capture {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 4px solid rgba(20,20,20,0.55);
+      box-sizing: border-box;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .selected {
+      outline: 5px solid #ffe669;
+      z-index: 2;
+    }
+    .lastmove {
+      box-shadow: 0 0 0 6px #59a5f5cc inset;
+    }
+    #status {
+      margin-top: 1.5em;
+      text-align: center;
+      color: #eee;
+      font-size: 1.2em;
+    }
+    #reset {
+      margin-left: 1em;
+      font-size: 1.1em;
+      background: #593e2a;
+      border: none;
+      color: #ffe669;
+      border-radius: 6px;
+      padding: 0.3em 1.2em;
+      cursor: pointer;
+      box-shadow: 0 2px 6px #0004;
+      transition: background 0.2s;
+    }
+    #reset:hover {
+      background: #6e4b2c;
+    }
+    .bot-label {
+      margin-left: 1em;
+      font-size: 1em;
+    }
+    #bot-side-label, #fush-side-label {
+      margin-left: 0.5em;
+    }
+    #elo-input {
+      width: 4em;
+      font-size: 1em;
+      margin-left: 0.5em;
+      text-align: right;
+      background: #222;
+      color: #ffe669;
+      border: 1px solid #84652e;
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+    select, input[type="checkbox"] {
+      background: #222;
+      color: #ffe669;
+      border: 1px solid #84652e;
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+    label {
+      cursor: pointer;
+    }
+    #bot-select-label, #fush-controls {
+      margin-left: 1em;
+      font-size: 1em;
+    }
+    @media (max-width: 850px) {
+      #board { grid-template: repeat(8, 10vw) / repeat(8, 10vw); }
+      .square { width: 10vw; height: 10vw; font-size: 7vw; }
+      .move-circle { width: 3vw; height: 3vw; }
+      .move-capture { width: 5vw; height: 5vw; border-width: 0.6vw; }
+    }
+    @media (max-width: 500px) {
+      #board { grid-template: repeat(8, 11vw) / repeat(8, 11vw); }
+      .square { width: 11vw; height: 11vw; font-size: 8vw; }
+      .move-circle { width: 3.5vw; height: 3.5vw; }
+      .move-capture { width: 6vw; height: 6vw; border-width: 0.7vw; }
+      #gameinfo { font-size: 1em; }
+      #status { font-size: 1em; }
+      #reset { font-size: 1em; }
+    }
+    .square > span {
+      filter: drop-shadow(0 4px 2px #0008);
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameinfo">
+    <span>
+      <label><input type="radio" name="game" value="chess" checked> Chess</label>
+      <label><input type="radio" name="game" value="checkers"> Checkers</label>
+    </span>
+    <span class="bot-label" id="bot-controls-chess">
+      <label>
+        <input type="checkbox" id="bot-toggle"> Play vs Bot
+      </label>
+      <span id="bot-select-label">
+        <select id="bot-select">
+          <option value="Fosh1">Fosh1</option>
+          <option value="Fosh2">Fosh2</option>
+          <option value="Fosh3" selected>Fosh3</option>
+          <option value="Fosh4">Fosh4</option>
+        </select>
+      </span>
+      <span id="bot-side-label">
+        as <select id="bot-side"><option value="b">Black</option><option value="w">White</option></select>
+      </span>
+      <span id="elo-label">
+        Elo: <input type="number" min="100" max="2500" step="1" value="287" id="elo-input">
+      </span>
+    </span>
+    <span class="bot-label" id="fush-controls" style="display:none;">
+      <label>
+        <input type="checkbox" id="fush-toggle"> Play vs Fush
+      </label>
+      <span id="fush-side-label">
+        as <select id="fush-side"><option value="b">Black</option><option value="w">White</option></select>
+      </span>
+    </span>
+    <button id="reset">Reset</button>
+  </div>
+  <div id="board"></div>
+  <div id="status"></div>
+  <script>
+    const PIECES = {
+      chess: {
+        wK: '♔', wQ: '♕', wR: '♖', wB: '♗', wN: '♘', wP: '♙',
+        bK: '♚', bQ: '♛', bR: '♜', bB: '♝', bN: '♞', bP: '♟'
+      },
+      checkers: {
+        w: '⛀', b: '⛂', wK: '⛁', bK: '⛃'
+      }
+    };
+    const CHESS_START = [
+      ['bR','bN','bB','bQ','bK','bB','bN','bR'],
+      ['bP','bP','bP','bP','bP','bP','bP','bP'],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      [null,null,null,null,null,null,null,null],
+      ['wP','wP','wP','wP','wP','wP','wP','wP'],
+      ['wR','wN','wB','wQ','wK','wB','wN','wR'],
+    ];
+    function CHECKERS_START() {
+      const b = [];
+      for (let r = 0; r < 8; r++) {
+        const row = [];
+        for (let c = 0; c < 8; c++) {
+          if ((r + c) % 2 === 1) {
+            if (r < 3) row.push('b');
+            else if (r > 4) row.push('w');
+            else row.push(null);
+          } else {
+            row.push(null);
+          }
+        }
+        b.push(row);
+      }
+      return b;
+    }
+    function deepClone(arr) { return JSON.parse(JSON.stringify(arr)); }
+    function inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+    function getChessMoves(board, from, turn, castling, enpassantSquare) {
+      const [fr, fc] = from;
+      const piece = board[fr][fc];
+      if (!piece) return [];
+      const color = piece[0];
+      const type = piece[1];
+      const moves = [];
+      const D = {
+        N: [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]],
+        B: [[-1,-1],[-1,1],[1,-1],[1,1]],
+        R: [[-1,0],[1,0],[0,-1],[0,1]],
+        Q: [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]],
+        K: [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
+      };
+      function isEmpty(r, c) { return inBounds(r, c) && !board[r][c]; }
+      function isEnemy(r, c) { return inBounds(r, c) && board[r][c] && board[r][c][0] !== color; }
+      function isFriend(r, c) { return inBounds(r, c) && board[r][c] && board[r][c][0] === color; }
+      if (type === 'N') {
+        for (const [dr, dc] of D.N)
+          if (!isFriend(fr+dr, fc+dc))
+            moves.push([fr+dr, fc+dc]);
+      } else if (type === 'B' || type === 'Q') {
+        for (const [dr, dc] of D.B)
+          for (let i = 1; i < 8; ++i) {
+            const r = fr + dr*i, c = fc + dc*i;
+            if (!inBounds(r, c)) break;
+            if (isFriend(r, c)) break;
+            moves.push([r, c]);
+            if (isEnemy(r, c)) break;
+          }
+      }
+      if (type === 'R' || type === 'Q') {
+        for (const [dr, dc] of D.R)
+          for (let i = 1; i < 8; ++i) {
+            const r = fr + dr*i, c = fc + dc*i;
+            if (!inBounds(r, c)) break;
+            if (isFriend(r, c)) break;
+            moves.push([r, c]);
+            if (isEnemy(r, c)) break;
+          }
+      }
+      if (type === 'K') {
+        for (const [dr, dc] of D.K)
+          if (!isFriend(fr+dr, fc+dc))
+            moves.push([fr+dr, fc+dc]);
+        if (!isInCheck(board, color, castling, enpassantSquare)) {
+          if (castling[color+'K']) {
+            const row = (color==='w'?7:0);
+            if (!board[row][5] && !board[row][6]
+                && !isAttacked(board, row, 5, color)
+                && !isAttacked(board, row, 6, color))
+              moves.push([row,6]);
+          }
+          if (castling[color+'Q']) {
+            const row = (color==='w'?7:0);
+            if (!board[row][1] && !board[row][2] && !board[row][3]
+                && !isAttacked(board, row, 2, color)
+                && !isAttacked(board, row, 3, color))
+              moves.push([row,2]);
+          }
+        }
+      }
+      if (type === 'P') {
+        const dir = color === 'w' ? -1 : 1;
+        if (isEmpty(fr+dir, fc))
+          moves.push([fr+dir, fc]);
+        if ((color==='w' && fr===6)||(color==='b' && fr===1))
+          if (isEmpty(fr+dir, fc) && isEmpty(fr+2*dir, fc))
+            moves.push([fr+2*dir, fc]);
+        for (const dc of [-1,1]) {
+          if (isEnemy(fr+dir, fc+dc))
+            moves.push([fr+dir, fc+dc]);
+          if (enpassantSquare && fr+dir === enpassantSquare[0] && fc+dc === enpassantSquare[1])
+            moves.push([fr+dir, fc+dc]);
+        }
+      }
+      return moves.filter(([r, c]) => inBounds(r, c));
+    }
+    function isInCheck(board, color, castling, enpassantSquare) {
+      let kr, kc;
+      for (let r=0; r<8; ++r)
+        for (let c=0; c<8; ++c)
+          if (board[r][c] === color+'K')
+            kr = r, kc = c;
+      return isAttacked(board, kr, kc, color);
+    }
+    function isAttacked(board, r, c, color) {
+      const opp = color === 'w' ? 'b' : 'w';
+      const dir = color === 'w' ? -1 : 1;
+      for (const dc of [-1,1])
+        if (inBounds(r+dir, c+dc) && board[r+dir][c+dc] === opp+'P')
+          return true;
+      for (const [dr, dc] of [[-2,-1],[-2,1],[-1,2],[1,2],[2,1],[2,-1],[-1,-2],[1,-2]])
+        if (inBounds(r+dr, c+dc) && board[r+dr][c+dc] === opp+'N')
+          return true;
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]])
+        if (inBounds(r+dr, c+dc) && board[r+dr][c+dc] === opp+'K')
+          return true;
+      for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]])
+        for (let i=1; i<8; ++i) {
+          const rr = r+dr*i, cc = c+dc*i;
+          if (!inBounds(rr, cc)) break;
+          const p = board[rr][cc];
+          if (!p) continue;
+          if (p[0] === color) break;
+          if (p[0] === opp && (p[1] === 'B' || p[1] === 'Q')) return true;
+          break;
+        }
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]])
+        for (let i=1; i<8; ++i) {
+          const rr = r+dr*i, cc = c+dc*i;
+          if (!inBounds(rr, cc)) break;
+          const p = board[rr][cc];
+          if (!p) continue;
+          if (p[0] === color) break;
+          if (p[0] === opp && (p[1] === 'R' || p[1] === 'Q')) return true;
+          break;
+        }
+      return false;
+    }
+    function isDefended(curBoard, r, c, color) {
+      for (let rr=0; rr<8; ++rr) for (let cc=0; cc<8; ++cc) {
+        if (curBoard[rr][cc] && curBoard[rr][cc][0] === color) {
+          let ms = getChessMoves(curBoard, [rr, cc], color, castling, enpassantSquare);
+          if (ms.some(([mr, mc]) => mr === r && mc === c)) {
+            if (rr !== r || cc !== c)
+              return true;
+          }
+        }
+      }
+      return false;
+    }
+    function getCheckersMoves(board, from, color, mustCapture) {
+      const [fr, fc] = from;
+      const piece = board[fr][fc];
+      if (!piece) return [];
+      const king = piece.length === 2;
+      const dirs = [];
+      if (king || color === 'w') dirs.push([-1,-1], [-1,1]);
+      if (king || color === 'b') dirs.push([1,-1], [1,1]);
+      let captures = [];
+      for (const [dr, dc] of dirs) {
+        const mr = fr + dr, mc = fc + dc;
+        const tr = fr + 2*dr, tc = fc + 2*dc;
+        if (inBounds(tr, tc) && board[mr][mc] && board[mr][mc][0] !== color && !board[tr][tc])
+          captures.push([tr, tc]);
+      }
+      if (mustCapture && captures.length > 0)
+        return captures;
+      let moves = [];
+      for (const [dr, dc] of dirs) {
+        const nr = fr+dr, nc = fc+dc;
+        if (inBounds(nr, nc) && !board[nr][nc]) moves.push([nr, nc]);
+      }
+      return captures.length > 0 ? captures : moves;
+    }
+    function hasCheckersCapture(board, color) {
+      for (let r=0; r<8; ++r)
+        for (let c=0; c<8; ++c)
+          if (board[r][c] && board[r][c][0] === color)
+            if (getCheckersMoves(board, [r,c], color, true).length)
+              return true;
+      return false;
+    }
+    const PIECE_VALUES = {
+      Q: 9,
+      R: 5,
+      B: 3,
+      N: 3,
+      P: 1,
+      K: 100
+    };
+    function findUndefendedAttackedPieces(botSide) {
+      let result = [];
+      for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+        const piece = board[r][c];
+        if (!piece || piece[0] !== botSide) continue;
+        const t = piece[1];
+        if (t === "P" || t === "K") continue;
+        if (isAttacked(board, r, c, botSide) && !isDefended(board, r, c, botSide)) {
+          result.push([r, c]);
+        }
+      }
+      return result;
+    }
+    let gameType = 'chess';
+    let board = deepClone(CHESS_START);
+    let turn = 'w';
+    let selected = null;
+    let legalMoves = [];
+    let castling = { wK: true, wQ: true, bK: true, bQ: true };
+    let enpassantSquare = null;
+    let lastMove = null;
+    let checkersMultiJump = false;
+    let mustCapture = false;
+    // Chess Bot-related variables
+    let botEnabled = false;
+    let botSide = 'b'; // can be 'w' or 'b'
+    let botName = "Fosh3";
+    let botElo = 1200;
+    // Checkers bot (Fush)
+    let fushEnabled = false;
+    let fushSide = 'b'; // can be 'w' or 'b'
+    // Elo bounds for each bot
+    const BOTS = {
+      "Fosh1": {name: "Fosh1", min: 387, max: 387, default: 387},
+      "Fosh2": {name: "Fosh2", min: 100, max: 1000, default: 600},
+      "Fosh3": {name: "Fosh3", min: 100, max: 2500, default: 1200},
+      "Fosh4": {name: "Fosh4", min: 3500, max: 3500, default: 3500}
+    };
+    function renderBoard() {
+      const el = document.getElementById('board');
+      el.innerHTML = '';
+      const moveLookup = {};
+      for (const [mr, mc] of legalMoves) {
+        moveLookup[mr + "," + mc] = true;
+      }
+      function isCaptureTarget(r, c) {
+        if (gameType === "chess") {
+          if (!selected) return false;
+          const dest = board[r][c];
+          return dest && dest[0] !== board[selected[0]][selected[1]][0];
+        } else if (gameType === "checkers") {
+          if (!selected) return false;
+          const [fr, fc] = selected;
+          return Math.abs(fr - r) === 2;
+        }
+        return false;
+      }
+      for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+        const sq = document.createElement('div');
+        sq.className = 'square ' + ((r+c)%2 ? 'dark' : 'light');
+        if (selected && selected[0] === r && selected[1] === c) sq.classList.add('selected');
+        if (lastMove && (lastMove[0][0] === r && lastMove[0][1] === c
+                      || lastMove[1][0] === r && lastMove[1][1] === c)) sq.classList.add('lastmove');
+        const p = board[r][c];
+        if (p) {
+          const span = document.createElement('span');
+          if (gameType === 'chess') span.textContent = PIECES.chess[p];
+          else if (gameType === 'checkers') {
+            if (p.length === 2) span.textContent = PIECES.checkers[p];
+            else span.textContent = PIECES.checkers[p];
+          }
+          sq.appendChild(span);
+        }
+        if (moveLookup[r + "," + c]) {
+          if (isCaptureTarget(r, c)) {
+            const cap = document.createElement('div');
+            cap.className = 'move-capture';
+            sq.appendChild(cap);
+          } else {
+            const circ = document.createElement('div');
+            circ.className = 'move-circle';
+            sq.appendChild(circ);
+          }
+        }
+        sq.onclick = () => onSquareClick(r, c);
+        el.appendChild(sq);
+      }
+      updateStatus();
+    }
+    function onSquareClick(r, c) {
+      if (gameType === 'chess') {
+        chessClick(r, c);
+      } else {
+        checkersClick(r, c);
+      }
+    }
+    function chessClick(r, c) {
+      if (botEnabled && turn === botSide) return;
+      if (selected) {
+        if (legalMoves.some(([mr, mc]) => mr === r && mc === c)) {
+          doChessMove(selected, [r, c]);
+          selected = null;
+          legalMoves = [];
+          renderBoard();
+          maybeBotMoveChess();
+          return;
+        }
+      }
+      if (board[r][c] && board[r][c][0] === turn) {
+        selected = [r, c];
+        let pseudoMoves = getChessMoves(board, [r, c], turn, castling, enpassantSquare);
+        legalMoves = pseudoMoves.filter(([mr, mc]) => {
+          const [nb, ncast, nenp] = chessMakeMove([r, c], [mr, mc]);
+          return !isInCheck(nb, turn, ncast, nenp);
+        });
+      } else {
+        selected = null;
+        legalMoves = [];
+      }
+      renderBoard();
+    }
+    function doChessMove(from, to) {
+      const [fr, fc] = from, [tr, tc] = to;
+      let moved = board[fr][fc], captured = board[tr][tc];
+      let promote = false, promoteTo = 'Q';
+      let moveEnPassant = false;
+      let oldEP = enpassantSquare;
+      let nb = deepClone(board);
+      nb[tr][tc] = nb[fr][fc]; nb[fr][fc] = null;
+      if (moved[1] === 'P' && (tr === 0 || tr === 7)) {
+        promote = true;
+        nb[tr][tc] = moved[0] + promoteTo;
+      }
+      if (moved[1] === 'P' && fc !== tc && !captured) {
+        nb[tr][tc] = nb[fr][fc];
+        nb[fr][fc] = null;
+        nb[fr][tc] = null;
+        moveEnPassant = true;
+      }
+      if (moved[1] === 'K' && Math.abs(tc-fc) === 2) {
+        if (tc === 6) {
+          nb[tr][5] = nb[tr][7];
+          nb[tr][7] = null;
+        }
+        if (tc === 2) {
+          nb[tr][3] = nb[tr][0];
+          nb[tr][0] = null;
+        }
+      }
+      let ncast = {...castling};
+      if (moved === 'wK') ncast.wK = ncast.wQ = false;
+      if (moved === 'bK') ncast.bK = ncast.bQ = false;
+      if (moved === 'wR' && fr === 7 && fc === 0) ncast.wQ = false;
+      if (moved === 'wR' && fr === 7 && fc === 7) ncast.wK = false;
+      if (moved === 'bR' && fr === 0 && fc === 0) ncast.bQ = false;
+      if (moved === 'bR' && fr === 0 && fc === 7) ncast.bK = false;
+      let nenp = null;
+      if (moved[1] === 'P' && Math.abs(tr-fr) === 2)
+        nenp = [fr + (tr-fr)/2, fc];
+      board = nb;
+      castling = ncast;
+      enpassantSquare = nenp;
+      lastMove = [from, to];
+      turn = turn === 'w' ? 'b' : 'w';
+      setTimeout(() => showChessEndIfNeeded(), 10);
+    }
+    function chessMakeMove(from, to) {
+      const [fr, fc] = from, [tr, tc] = to;
+      let moved = board[fr][fc], captured = board[tr][tc];
+      let nb = deepClone(board);
+      nb[tr][tc] = nb[fr][fc]; nb[fr][fc] = null;
+      let ncast = {...castling};
+      if (moved === 'wK') ncast.wK = ncast.wQ = false;
+      if (moved === 'bK') ncast.bK = ncast.bQ = false;
+      if (moved === 'wR' && fr === 7 && fc === 0) ncast.wQ = false;
+      if (moved === 'wR' && fr === 7 && fc === 7) ncast.wK = false;
+      if (moved === 'bR' && fr === 0 && fc === 0) ncast.bQ = false;
+      if (moved === 'bR' && fr === 0 && fc === 7) ncast.bK = false;
+      let nenp = null;
+      if (moved[1] === 'P' && Math.abs(tr-fr) === 2)
+        nenp = [fr + (tr-fr)/2, fc];
+      return [nb, ncast, nenp];
+    }
+    function showChessEndIfNeeded() {
+      let hasLegal = false;
+      for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+        if (board[r][c] && board[r][c][0] === turn) {
+          let ms = getChessMoves(board, [r,c], turn, castling, enpassantSquare);
+          for (let [mr, mc] of ms) {
+            const [nb, ncast, nenp] = chessMakeMove([r,c],[mr,mc]);
+            if (!isInCheck(nb, turn, ncast, nenp)) {
+              hasLegal = true;
+              break;
+            }
+          }
+        }
+        if (hasLegal) break;
+      }
+      const status = document.getElementById('status');
+      if (!hasLegal) {
+        if (isInCheck(board, turn, castling, enpassantSquare)) {
+          status.innerHTML = `<b>Checkmate!</b> ${turn === 'w' ? 'Black' : 'White'} wins.`;
+        } else {
+          status.innerHTML = `<b>Stalemate!</b>`;
+        }
+      } else if (isInCheck(board, turn, castling, enpassantSquare)) {
+        status.innerHTML = `<b>${turn === 'w' ? 'White' : 'Black'} is in check!</b>`;
+      }
+    }
+    function checkersClick(r, c) {
+      if (fushEnabled && turn === fushSide) return;
+      if (selected) {
+        if (legalMoves.some(([mr, mc]) => mr === r && mc === c)) {
+          const [fr, fc] = selected;
+          const cap = Math.abs(r-fr) === 2;
+          doCheckersMove(selected, [r, c]);
+          if (cap) {
+            selected = [r, c];
+            legalMoves = getCheckersMoves(board, [r, c], turn, true);
+            if (legalMoves.length) {
+              checkersMultiJump = true;
+              renderBoard();
+              return;
+            }
+          }
+          checkersMultiJump = false;
+          turn = turn === 'w' ? 'b' : 'w';
+          selected = null; legalMoves = [];
+          mustCapture = hasCheckersCapture(board, turn);
+          setTimeout(() => showCheckersEndIfNeeded(), 10);
+          renderBoard();
+          maybeFushMove();
+          return;
+        }
+      }
+      if (board[r][c] && board[r][c][0] === turn) {
+        let ms = getCheckersMoves(board, [r, c], turn, mustCapture);
+        if (ms.length) {
+          selected = [r, c];
+          legalMoves = ms;
+        } else {
+          selected = null;
+          legalMoves = [];
+        }
+      } else {
+        selected = null;
+        legalMoves = [];
+      }
+      renderBoard();
+    }
+    function doCheckersMove(from, to) {
+      const [fr, fc] = from, [tr, tc] = to;
+      const piece = board[fr][fc];
+      board[tr][tc] = board[fr][fc];
+      board[fr][fc] = null;
+      if (piece === 'w' && tr === 0) board[tr][tc] = 'wK';
+      if (piece === 'b' && tr === 7) board[tr][tc] = 'bK';
+      if (Math.abs(fr-tr) === 2) {
+        const mr = (fr+tr)/2, mc = (fc+tc)/2;
+        board[mr][mc] = null;
+      }
+      lastMove = [from, to];
+    }
+    function showCheckersEndIfNeeded() {
+      let hasMove = false, hasPiece = false;
+      for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+        if (board[r][c] && board[r][c][0] === turn) {
+          hasPiece = true;
+          if (getCheckersMoves(board, [r,c], turn, false).length) hasMove = true;
+        }
+      }
+      const status = document.getElementById('status');
+      if (!hasPiece || !hasMove) {
+        status.innerHTML = `<b>Game Over!</b> ${turn === 'w' ? 'Black' : 'White'} wins.`;
+      }
+    }
+    function updateStatus() {
+      const status = document.getElementById('status');
+      if (gameType === 'chess') {
+        if (botEnabled) {
+          status.innerHTML = `<b>${turn === 'w' ? 'White' : 'Black'} to move.</b> (${botName}: ${botSide === 'w' ? 'White' : 'Black'}, ${botElo} Elo)`;
+        } else {
+          status.innerHTML = `<b>${turn === 'w' ? 'White' : 'Black'} to move.</b>`;
+        }
+      } else {
+        if (fushEnabled) {
+          status.innerHTML = `<b>${turn === 'w' ? 'White' : 'Black'} to move.</b> (Fush: ${fushSide === 'w' ? 'White' : 'Black'}) ${mustCapture ? '(Must capture)' : ''}`;
+        } else {
+          status.innerHTML = `<b>${turn === 'w' ? 'White' : 'Black'} to move.</b> ${mustCapture ? '(Must capture)' : ''}`;
+        }
+      }
+    }
+    document.getElementsByName('game').forEach(radio => {
+      radio.onchange = e => {
+        gameType = e.target.value;
+        document.getElementById('bot-controls-chess').style.display = (gameType === 'chess') ? 'inline' : 'none';
+        document.getElementById('fush-controls').style.display = (gameType === 'checkers') ? 'inline' : 'none';
+        if (gameType === 'chess') {
+          board = deepClone(CHESS_START);
+          castling = { wK: true, wQ: true, bK: true, bQ: true };
+          enpassantSquare = null;
+        } else {
+          board = CHECKERS_START();
+          mustCapture = hasCheckersCapture(board, 'w');
+        }
+        turn = 'w';
+        selected = null;
+        legalMoves = [];
+        lastMove = null;
+        renderBoard();
+        if (botEnabled && gameType === 'chess' && botSide === 'w') {
+          setTimeout(() => maybeBotMoveChess(), 100);
+        }
+        if (fushEnabled && gameType === 'checkers' && fushSide === 'w') {
+          setTimeout(() => maybeFushMove(), 100);
+        }
+      };
+    });
+    document.getElementById('reset').onclick = () => {
+      if (gameType === 'chess') {
+        board = deepClone(CHESS_START);
+        castling = { wK: true, wQ: true, bK: true, bQ: true };
+        enpassantSquare = null;
+      } else {
+        board = CHECKERS_START();
+        mustCapture = hasCheckersCapture(board, 'w');
+      }
+      turn = 'w';
+      selected = null;
+      legalMoves = [];
+      lastMove = null;
+      renderBoard();
+      if (botEnabled && gameType === 'chess' && botSide === 'w') {
+        setTimeout(() => maybeBotMoveChess(), 100);
+      }
+      if (fushEnabled && gameType === 'checkers' && fushSide === 'w') {
+        setTimeout(() => maybeFushMove(), 100);
+      }
+    };
+    document.getElementById('bot-toggle').onchange = function() {
+      botEnabled = this.checked;
+      document.getElementById('bot-side-label').style.display = botEnabled ? 'inline' : 'none';
+      document.getElementById('elo-label').style.display = botEnabled ? 'inline' : 'none';
+      document.getElementById('bot-select-label').style.display = botEnabled ? 'inline' : 'none';
+      document.getElementById('elo-input').disabled = !botEnabled || botName === 'Fosh1' || botName === 'Fosh4';
+      if (botEnabled && gameType === 'chess' && turn === botSide) {
+        setTimeout(() => maybeBotMoveChess(), 200);
+      }
+      renderBoard();
+    };
+    document.getElementById('bot-side').onchange = function() {
+      botSide = this.value;
+      if (botEnabled && gameType === 'chess' && turn === botSide) {
+        setTimeout(() => maybeBotMoveChess(), 200);
+      }
+      renderBoard();
+    };
+    document.getElementById('bot-select').onchange = function() {
+      botName = this.value;
+      let spec = BOTS[botName];
+      document.getElementById('elo-input').min = spec.min;
+      document.getElementById('elo-input').max = spec.max;
+      document.getElementById('elo-input').value = spec.default;
+      botElo = spec.default;
+      document.getElementById('elo-input').disabled = botName === 'Fosh1' || botName === 'Fosh4';
+      document.getElementById('elo-label').style.display = botEnabled ? 'inline' : 'none';
+      renderBoard();
+    };
+    document.getElementById('elo-input').onchange = function() {
+      let x = parseInt(this.value, 10);
+      let spec = BOTS[botName];
+      if (isNaN(x) || x < spec.min) x = spec.min;
+      if (x > spec.max) x = spec.max;
+      this.value = x;
+      botElo = x;
+      renderBoard();
+    };
+    document.getElementById('bot-controls-chess').style.display = 'inline';
+    document.getElementById('elo-label').style.display = 'none';
+    document.getElementById('bot-select-label').style.display = 'inline';
+    // Fush controls
+    document.getElementById('fush-toggle').onchange = function() {
+      fushEnabled = this.checked;
+      document.getElementById('fush-side-label').style.display = fushEnabled ? 'inline' : 'none';
+      if (fushEnabled && gameType === 'checkers' && turn === fushSide) {
+        setTimeout(() => maybeFushMove(), 200);
+      }
+      renderBoard();
+    };
+    document.getElementById('fush-side').onchange = function() {
+      fushSide = this.value;
+      if (fushEnabled && gameType === 'checkers' && turn === fushSide) {
+        setTimeout(() => maybeFushMove(), 200);
+      }
+      renderBoard();
+    };
+
+    // CHECKERS BOT: Fush
+    function maybeFushMove() {
+      if (!(fushEnabled && gameType === "checkers" && turn === fushSide)) return;
+      let moves = [];
+      let capturesAvailable = hasCheckersCapture(board, fushSide);
+      // Gather all legal moves for Fush
+      for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+        if (board[r][c] && board[r][c][0] === fushSide) {
+          let ms = getCheckersMoves(board, [r, c], fushSide, capturesAvailable);
+          for (let [mr, mc] of ms) {
+            moves.push({from:[r,c], to:[mr,mc], isCapture: Math.abs(r-mr) === 2, isKing: board[r][c].length === 2});
+          }
+        }
+      }
+      if (moves.length === 0) return;
+      // Heuristics:
+      // 1. Always prefer captures (forced anyway)
+      // 2. If there are captures, prefer to capture with a king if possible
+      // 3. If no captures, prefer moves that promote to a king, else random
+      let chosen = null;
+      let captureKings = moves.filter(m => m.isCapture && m.isKing);
+      let captures = moves.filter(m => m.isCapture);
+      let promotions = moves.filter(m => !m.isCapture && ((fushSide==='w' && m.to[0]===0) || (fushSide==='b' && m.to[0]===7)));
+      if (captureKings.length) chosen = captureKings[Math.floor(Math.random()*captureKings.length)];
+      else if (captures.length) chosen = captures[Math.floor(Math.random()*captures.length)];
+      else if (promotions.length) chosen = promotions[Math.floor(Math.random()*promotions.length)];
+      else chosen = moves[Math.floor(Math.random()*moves.length)];
+      setTimeout(() => {
+        doCheckersMove(chosen.from, chosen.to);
+        // Multi-capture: keep going if possible
+        if (chosen.isCapture) {
+          let more = getCheckersMoves(board, chosen.to, fushSide, true);
+          if (more.length) {
+            selected = chosen.to;
+            legalMoves = more;
+            renderBoard();
+            setTimeout(() => maybeFushMove(), 350);
+            return;
+          }
+        }
+        selected = null;
+        legalMoves = [];
+        turn = (turn === "w" ? "b" : "w");
+        mustCapture = hasCheckersCapture(board, turn);
+        renderBoard();
+        setTimeout(() => maybeFushMove(), 350);
+      }, 350 + Math.random()*250);
+    }
+
+    function maybeBotMoveChess() {
+      if (!botEnabled || gameType !== 'chess' || turn !== botSide) return;
+      let status = document.getElementById('status');
+      if (status.innerHTML.includes('Checkmate') || status.innerHTML.includes('Stalemate')) return;
+      let moves = [];
+      for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+        if (board[r][c] && board[r][c][0] === botSide) {
+          let pseudoMoves = getChessMoves(board, [r,c], botSide, castling, enpassantSquare);
+          let legal = pseudoMoves.filter(([mr, mc]) => {
+            const [nb, ncast, nenp] = chessMakeMove([r, c], [mr, mc]);
+            return !isInCheck(nb, botSide, ncast, nenp);
+          });
+          for (const [mr, mc] of legal) {
+            moves.push({ from: [r, c], to: [mr, mc] });
+          }
+        }
+      }
+      if (moves.length === 0) return;
+      let endangered = findUndefendedAttackedPieces(botSide);
+      let safetyMoves = [];
+      for (const [r, c] of endangered) {
+        let pseudoMoves = getChessMoves(board, [r, c], botSide, castling, enpassantSquare);
+        for (const [mr, mc] of pseudoMoves) {
+          const [nb, ncast, nenp] = chessMakeMove([r, c], [mr, mc]);
+          if (!isAttacked(nb, mr, mc, botSide)) {
+            if (!isInCheck(nb, botSide, ncast, nenp)) {
+              safetyMoves.push({
+                from: [r, c],
+                to: [mr, mc],
+                value: PIECE_VALUES[board[r][c][1]]
+              });
+            }
+          }
+        }
+      }
+      if (safetyMoves.length > 0) {
+        safetyMoves.sort((a, b) => b.value - a.value);
+        let chosen = safetyMoves[0];
+        setTimeout(() => {
+          doChessMove(chosen.from, chosen.to);
+          renderBoard();
+          setTimeout(() => maybeBotMoveChess(), 400);
+        }, 350 + Math.random() * 250);
+        return;
+      }
+      let blunderProb = 0, playSafe = false, preferCaptures = false;
+      if (botName === "Fosh4") {
+        playSafe = true; preferCaptures = true;
+      }
+      else if (botName === "Fosh3") {
+        if (botElo < 600) { blunderProb = 0.2; }
+        else if (botElo < 1000) { blunderProb = 0.1; }
+        else if (botElo < 1300) { playSafe = true; }
+        else if (botElo < 1600) { playSafe = true; preferCaptures = true; }
+        else { playSafe = true; preferCaptures = true; }
+      }
+      else if (botName === "Fosh2") {
+        if (botElo < 400) { blunderProb = 0.35; }
+        else if (botElo < 800) { blunderProb = 0.15; }
+        else { blunderProb = 0.1; playSafe = true; }
+      }
+      else if (botName === "Fosh1") {
+        blunderProb = 0.25;
+        playSafe = false;
+        preferCaptures = false;
+      }
+      if (Math.random() < blunderProb) {
+        let blunderMove = findBotBlunderMove(moves, botSide);
+        if (blunderMove) {
+          setTimeout(() => {
+            doChessMove(blunderMove.from, blunderMove.to);
+            renderBoard();
+            setTimeout(() => maybeBotMoveChess(), 400);
+          }, 350 + Math.random() * 250);
+          return;
+        }
+      }
+      let safeMoves = moves;
+      if (playSafe) {
+        safeMoves = moves.filter(mv => !isMoveHanging(mv.from, mv.to, botSide));
+        if (preferCaptures) {
+          let captureMoves = safeMoves.filter(mv => isCaptureMove(mv.from, mv.to));
+          if (captureMoves.length > 0) safeMoves = captureMoves;
+        }
+        if (safeMoves.length === 0) safeMoves = moves;
+      }
+      if (botName === "Fosh4") {
+        let bestMoves = [];
+        let bestValue = -Infinity;
+        for (const mv of safeMoves) {
+          let capVal = 0;
+          let [tr, tc] = mv.to;
+          let target = board[tr][tc];
+          if (target && target[0] !== botSide) capVal = PIECE_VALUES[target[1]];
+          if (capVal > bestValue) { bestValue = capVal; bestMoves = [mv]; }
+          else if (capVal === bestValue) bestMoves.push(mv);
+        }
+        let chosen = bestMoves.length ? bestMoves[Math.floor(Math.random() * bestMoves.length)] : safeMoves[Math.floor(Math.random() * safeMoves.length)];
+        setTimeout(() => {
+          doChessMove(chosen.from, chosen.to);
+          renderBoard();
+          setTimeout(() => maybeBotMoveChess(), 400);
+        }, 350 + Math.random() * 250);
+        return;
+      }
+      let chosen = safeMoves[Math.floor(Math.random() * safeMoves.length)];
+      setTimeout(() => {
+        doChessMove(chosen.from, chosen.to);
+        renderBoard();
+        setTimeout(() => maybeBotMoveChess(), 400);
+      }, 350 + Math.random() * 250);
+    }
+    function isMoveHanging(from, to, color) {
+      const [nb, ncast, nenp] = chessMakeMove(from, to);
+      const [tr, tc] = to;
+      const enemy = color === 'w' ? 'b' : 'w';
+      let piece = nb[tr][tc];
+      if (!piece) return false;
+      if (isAttacked(nb, tr, tc, color)) {
+        let defended = false;
+        for (let r=0; r<8; ++r) for (let c=0; c<8; ++c) {
+          if (nb[r][c] && nb[r][c][0] === color) {
+            let ms = getChessMoves(nb, [r, c], color, ncast, nenp);
+            if (ms.some(([mr, mc]) => mr === tr && mc === tc)) {
+              defended = true;
+              break;
+            }
+          }
+        }
+        return !defended;
+      }
+      return false;
+    }
+    function findBotBlunderMove(moves, color) {
+      for (let mv of moves) {
+        if (isMoveHanging(mv.from, mv.to, color)) return mv;
+      }
+      return null;
+    }
+    function isCaptureMove(from, to) {
+      const [tr, tc] = to;
+      return board[tr][tc] && board[tr][tc][0] !== board[from[0]][from[1]][0];
+    }
+    renderBoard();
+    if (botEnabled && gameType === 'chess' && botSide === 'w') {
+      setTimeout(() => maybeBotMoveChess(), 100);
+    }
+    if (fushEnabled && gameType === 'checkers' && fushSide === 'w') {
+      setTimeout(() => maybeFushMove(), 100);
+    }
+  </script>
+</body>
+</html>
